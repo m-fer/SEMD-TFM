@@ -1,0 +1,9 @@
+well	- brown
+active	- green
+gate	- red
+cont	- gray
+m1	    - blue
+via1	- blue2
+m2	    - ...
+via2	- ...
+...

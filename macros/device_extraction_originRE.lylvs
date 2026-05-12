@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<klayout-macro>
+ <description/>
+ <version/>
+ <category>lvs</category>
+ <prolog/>
+ <epilog/>
+ <doc/>
+ <autorun>false</autorun>
+ <autorun-early>false</autorun-early>
+ <priority>0</priority>
+ <shortcut/>
+ <show-in-menu>true</show-in-menu>
+ <group-name>lvs_scripts</group-name>
+ <menu-path>tools_menu.lvs.end</menu-path>
+ <interpreter>dsl</interpreter>
+ <dsl-interpreter-name>lvs-dsl-xml</dsl-interpreter-name>
+ <text># -------------------------------------------------------------------
+# Layers
+
+# Drawing layers
+well    = input(1, 0)
+active  = input(2, 0)
+poly    = input(3, 0)
+contact = input(4, 0)
+metal1  = input(5, 0)
+via1    = input(6, 0)
+metal2  = input(7, 0)
+via2    = input(8, 0)
+
+# Computed layers
+# test for active layers separated by poly
+# active_bridge = active.sized(0.3) 
+gate = poly &amp; active
+sd = active - gate
+
+pgate = gate &amp; well
+psd = sd &amp; well
+
+ngate = gate - well 
+nsd = sd - well
+bulk = extent - well
+
+
+# -------------------------------------------------------------------
+# Device extraction
+
+# NMOS transistor device extraction #-&gt; mos3
+  extract_devices(mos3("NMOS"), { 
+    "SD" =&gt; nsd, 
+    "G" =&gt; ngate, 
+    "tS" =&gt; nsd,
+    "tD" =&gt; nsd,
+    "tG" =&gt; poly,
+  })
+  
+# PMOS transistor device extraction
+extract_devices(mos3("PMOS"), {
+ "SD" =&gt; psd,
+ "G" =&gt; pgate,
+ "tS" =&gt; psd,
+ "tD" =&gt; psd,
+ "tG" =&gt; poly,
+})
+
+# -------------------------------------------------------------------
+# Connectivity
+connect(psd, contact)
+connect(nsd, contact)
+connect(pgate, contact)
+connect(ngate, contact)
+connect(poly, contact)
+connect(contact, metal1)
+connect(metal1, via1)
+connect(via1, metal2)
+connect(metal2, via2)
+
+# Netlist extraction
+netlist
+netlist.simplify
+puts "Extracted Netlist Summary:"
+puts netlist.to_s
+netlist_ptr = netlist
+netlist_ptr.each_circuit do |circ|
+  #NetlistUtils.print_info(circ)
+  
+  DescriptorExtractor.get_uutdescriptor(circ)
+end
+
+netlist.write("extracted_output.sp", RBA::NetlistSpiceWriter::new)
+
+# Netlist vs. netlist check
+# compare</text>
+</klayout-macro>
