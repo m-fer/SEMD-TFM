@@ -252,7 +252,7 @@ module DescriptorExtractor
     
     
     begin
-      test_nl.read("~/extracted_output.sp", RBA::NetlistSpiceReader.new)
+      test_nl.read(File.join(File.dirname(__FILE__), "../extracted_output.sp"), RBA::NetlistSpiceReader.new)
 
 
       #lib_path = File.join(File.dirname(__FILE__), 'netlist_utils.rb')
