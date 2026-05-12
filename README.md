@@ -1,6 +1,6 @@
 # Technology-Independent Identification of CMOS Logic Gates Through Topological Connectivity Analisis
 
-This project provides automated tools for netlist traversal, symmetry analysis, and LVS formatting within the KLayout environment.
+This project provides automated tools for netlist extraction and logic gate identification within the KLayout environment.
 
 ## Directory Structure
 
