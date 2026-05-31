@@ -15,18 +15,34 @@
  <menu-path>tools_menu.lvs.end</menu-path>
  <interpreter>dsl</interpreter>
  <dsl-interpreter-name>lvs-dsl-xml</dsl-interpreter-name>
- <text># -------------------------------------------------------------------
+ <text>require 'json'
+
+tech_name = "tsmc-65-simple"
+config_filename = "#{tech_name}_layout_map.json"
+config_path = File.expand_path(File.join(File.dirname(__FILE__), "../tech", config_filename))
+
+puts "INFO: Loading strict 1-1 mapping from: #{config_path}"
+tech_layers = JSON.parse(File.read(config_path))
+
+def get_layer(tech_config, name)
+    lyr = tech_config[name]
+    raise "LVS Error: Layer '#{name}' missing from config!" if lyr.nil?
+    input(lyr['layer'], lyr['datatype'])
+end
+
+# -------------------------------------------------------------------
 # Layers
 
 # Drawing layers
-well    = input(1, 0)
-active  = input(2, 0)
-poly    = input(3, 0)
-contact = input(4, 0)
-metal1  = input(5, 0)
-via1    = input(6, 0)
-metal2  = input(7, 0)
-via2    = input(8, 0)
+well    = get_layer(tech_layers, 'well')
+active  = get_layer(tech_layers, 'active')
+poly    = get_layer(tech_layers, 'poly')
+contact = get_layer(tech_layers, 'contact')
+metal1  = get_layer(tech_layers, 'metal1')
+m1_lbl  = get_layer(tech_layers, 'm1_lbl')
+via1    = get_layer(tech_layers, 'via1')
+metal2  = get_layer(tech_layers, 'metal2')
+via2    = get_layer(tech_layers, 'via2')
 
 # Computed layers
 # test for active layers separated by poly
@@ -39,7 +55,6 @@ psd = sd &amp; well
 
 ngate = gate - well 
 nsd = sd - well
-bulk = extent - well
 
 
 # -------------------------------------------------------------------
@@ -65,6 +80,8 @@ extract_devices(mos3("PMOS"), {
 
 # -------------------------------------------------------------------
 # Connectivity
+connect(metal1, m1_lbl)
+
 connect(psd, contact)
 connect(nsd, contact)
 connect(pgate, contact)
@@ -80,14 +97,38 @@ netlist
 netlist.simplify
 puts "Extracted Netlist Summary:"
 puts netlist.to_s
+
+netlist.combine_devices
+puts "Extracted after combine:"
+puts netlist.to_s
+
+
 netlist_ptr = netlist
 netlist_ptr.each_circuit do |circ|
   #NetlistUtils.print_info(circ)
   
-  DescriptorExtractor.get_uutdescriptor(circ)
+  puts DescriptorExtractor.get_uutdescriptor(circ)
+end
+writer = RBA::NetlistSpiceWriter::new
+writer.use_net_names = true 
+
+main_window = RBA::MainWindow.instance
+current_view = main_window&amp;.current_view
+layout_file_name =""
+if current_view
+  # Get the active layout object
+  active_layout = current_view.active_cellview&amp;.layout
+  
+  if active_layout
+    layout_file_path = current_view.active_cellview.filename
+    layout_file_name = layout_file_path.empty? ? "untitled.gds" : File.basename(layout_file_path, ".gds.gz")
+  end
 end
 
-netlist.write("extracted_output.sp", RBA::NetlistSpiceWriter::new)
+layout_file_name = "and2d2"
+output_file_path = "./output/"+ layout_file_name + "_netlist.sp"
+# To view the extracted netlist in the UI:
+netlist.write(output_file_path, writer)
 
 # Netlist vs. netlist check
 # compare</text>
