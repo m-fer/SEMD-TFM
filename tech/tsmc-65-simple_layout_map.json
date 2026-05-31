@@ -1,0 +1,11 @@
+{
+  "well":    {"layer": 205, "datatype": 0},
+  "active":  {"layer": 6, "datatype": 0},
+  "poly":    {"layer": 17, "datatype": 0},
+  "contact": {"layer": 30, "datatype": 0},
+  "metal1":  {"layer": 31, "datatype": 0},
+  "m1_lbl":  {"layer": 31, "datatype": 2},
+  "via1":    {"layer": 51, "datatype": 0},
+  "metal2":  {"layer": 32, "datatype": 0},
+  "via2":    {"layer": 52, "datatype": 0}
+}

@@ -4,7 +4,7 @@
  <description>Generic tech for automated IC reverse enginyeering</description>
  <group/>
  <dbu>0.001</dbu>
- <base-path/>
+ <base-path>/home/wolfy/SEMD-Master/TFM/src/OriginRE</base-path>
  <original-base-path>/home/wolfy/.klayout/tech/OriginRE</original-base-path>
  <layer-properties_file>OriginRE.lyp</layer-properties_file>
  <add-other-layers>true</add-other-layers>

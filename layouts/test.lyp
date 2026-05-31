@@ -92,24 +92,6 @@
  </properties>
  <properties>
   <expanded>false</expanded>
-  <frame-color>#FF4000</frame-color>
-  <fill-color>#FF4000</fill-color>
-  <frame-brightness>0</frame-brightness>
-  <fill-brightness>0</fill-brightness>
-  <dither-pattern>I3</dither-pattern>
-  <line-style/>
-  <valid>true</valid>
-  <visible>true</visible>
-  <transparent>false</transparent>
-  <width/>
-  <marked>false</marked>
-  <xfill>false</xfill>
-  <animation>0</animation>
-  <name>m1_lbl - 5/1</name>
-  <source>5/1@1</source>
- </properties>
- <properties>
-  <expanded>false</expanded>
   <frame-color>#00aaff</frame-color>
   <fill-color>#00aaff</fill-color>
   <frame-brightness>0</frame-brightness>
@@ -161,6 +143,24 @@
   <animation>0</animation>
   <name>via2 - 8/0</name>
   <source>8/0@1</source>
+ </properties>
+ <properties>
+  <expanded>false</expanded>
+  <frame-color>#ff4000</frame-color>
+  <fill-color>#ff4000</fill-color>
+  <frame-brightness>0</frame-brightness>
+  <fill-brightness>0</fill-brightness>
+  <dither-pattern>I3</dither-pattern>
+  <line-style/>
+  <valid>true</valid>
+  <visible>true</visible>
+  <transparent>false</transparent>
+  <width/>
+  <marked>false</marked>
+  <xfill>false</xfill>
+  <animation>0</animation>
+  <name>m1_lbl - 5/1</name>
+  <source>9/0@1</source>
  </properties>
  <name/>
 </layer-properties>
