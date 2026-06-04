@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # File: descriptor_extractor.rb
 module DescriptorExtractor
     IS_VALID_NET = ->(net) { !(net.nil? || net.expanded_name == 'VDD' || net.expanded_name == 'GND') }
@@ -43,7 +45,7 @@ module DescriptorExtractor
             output = !gate_found && sd_pmos_found && sd_nmos_found
             io_net_list << net.expanded_name if input || output
         end
-        return io_net_list
+        io_net_list
     end
 
     # returns for each net: (Name (eqnets, pmos, nmos, sd, g, io))
@@ -95,7 +97,7 @@ module DescriptorExtractor
         descriptor_tracker = Hash.new { |h, k| h[k] = [] }
 
         io_netlist.each do |current_io_net_name|
-            #current_io_net = circuit.net_by_name(current_io_net_name)
+            # current_io_net = circuit.net_by_name(current_io_net_name)
             current_io_net = circuit.each_net.find { |n| n.expanded_name == current_io_net_name }
             next unless IS_VALID_NET.call(current_io_net)
 
@@ -139,16 +141,16 @@ module DescriptorExtractor
             descriptor_tracker[round_descriptor] << current_io_net_name
             net_connection_descriptor += "#{round_descriptor}) "
         end
-        duplicates = descriptor_tracker.select { |descriptor, nets| nets.size > 1 }
+        duplicates = descriptor_tracker.select { |_descriptor, nets| nets.size > 1 }
         if duplicates.empty?
-            puts "All net descriptors are unique!"
+            puts 'All net descriptors are unique!'
         else
             duplicates.each do |descriptor, nets|
                 puts "MATCH FOUND: The descriptor '#{descriptor}' is shared by nets: #{nets.join(', ')}"
             end
         end
         net_connection_descriptor.chop!
-        return "#{net_connection_descriptor})", !duplicates.empty?
+        ["#{net_connection_descriptor})", !duplicates.empty?]
     end
 
     DescTermStats = Struct.new(:round, :num_pmos, :num_nmos, :num_sd, :num_g) do
@@ -285,12 +287,12 @@ module DescriptorExtractor
 
         io_netlist = get_global_io_nets(circuit)
         net_count = circuit.each_net.count { |net| IS_VALID_NET.call(net) }
-        net_descriptor =  get_net_descriptor(circuit, io_netlist)
+        net_descriptor = get_net_descriptor(circuit, io_netlist)
         connection_descriptor, duplicates = get_connection_descriptor(circuit, io_netlist, net_count)
-        return "\"#{circuit.each_device.count} #{net_count}\": " +
-                net_descriptor +
-                connection_descriptor + 
-                (duplicates ? get_terminal_descriptor(circuit, io_netlist) : " nil")
+        "\"#{circuit.each_device.count} #{net_count}\": " +
+            net_descriptor +
+            connection_descriptor +
+            (duplicates ? get_terminal_descriptor(circuit, io_netlist) : ' nil')
     end
 
     # --- UNIT TEST CASE BLOCK ---
@@ -304,7 +306,7 @@ module DescriptorExtractor
 
             lib_path = File.join(File.dirname(__FILE__), 'netlist_utils.rb')
             load lib_path
-            db = NetlistUtils.load_database()
+            db = NetlistUtils.load_database
 
             test_nl.each_circuit do |circuit|
                 runtime_descriptor = get_uutdescriptor(circuit)
@@ -312,7 +314,6 @@ module DescriptorExtractor
                 matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
                 puts "Descriptor classified as: #{matched_gate}"
             end
-
         rescue StandardError => e
             puts "[SPICE Error] #{e.message}"
             puts e.backtrace # This is like a GDB backtrace
