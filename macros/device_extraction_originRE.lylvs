@@ -104,11 +104,18 @@ puts netlist.to_s
 
 
 netlist_ptr = netlist
+
+db = NetlistUtils.load_database()
+
 netlist_ptr.each_circuit do |circ|
   #NetlistUtils.print_info(circ)
   
-  puts DescriptorExtractor.get_uutdescriptor(circ)
+  runtime_descriptor = DescriptorExtractor.get_uutdescriptor(circ)
+  puts "Runtime_descriptor: #{runtime_descriptor}"
+  matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
+  puts "Descriptor classified as: #{matched_gate}"
 end
+            
 writer = RBA::NetlistSpiceWriter::new
 writer.use_net_names = true 
 
@@ -125,7 +132,7 @@ if current_view
   end
 end
 
-layout_file_name = "and2d2"
+layout_file_name = "null"
 output_file_path = "./output/"+ layout_file_name + "_netlist.sp"
 # To view the extracted netlist in the UI:
 netlist.write(output_file_path, writer)
