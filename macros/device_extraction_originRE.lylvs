@@ -31,9 +31,7 @@ def get_layer(tech_config, name)
 end
 
 # -------------------------------------------------------------------
-# Layers
-
-# Drawing layers
+# Raw Input Layers
 well    = get_layer(tech_layers, 'well')
 active  = get_layer(tech_layers, 'active')
 poly    = get_layer(tech_layers, 'poly')
@@ -44,99 +42,99 @@ via1    = get_layer(tech_layers, 'via1')
 metal2  = get_layer(tech_layers, 'metal2')
 via2    = get_layer(tech_layers, 'via2')
 
-# Computed layers
-# test for active layers separated by poly
-# active_bridge = active.sized(0.3) 
-gate = poly &amp; active
-sd = active - gate
-
-pgate = gate &amp; well
-psd = sd &amp; well
-
-ngate = gate - well 
-nsd = sd - well
-
-
 # -------------------------------------------------------------------
-# Device extraction
+max_internal_distance = 0.059
+gate_cores            = poly | active
+clusters              = gate_cores.sized(max_internal_distance)
+gate_boundaries       = clusters.sized(-max_internal_distance).extents
 
-# NMOS transistor device extraction #-&gt; mos3
-  extract_devices(mos3("NMOS"), { 
-    "SD" =&gt; nsd, 
-    "G" =&gt; ngate, 
-    "tS" =&gt; nsd,
-    "tD" =&gt; nsd,
-    "tG" =&gt; poly,
-  })
-  
-# PMOS transistor device extraction
-extract_devices(mos3("PMOS"), {
- "SD" =&gt; psd,
- "G" =&gt; pgate,
- "tS" =&gt; psd,
- "tD" =&gt; psd,
- "tG" =&gt; poly,
-})
+clusters.output(210, 0)
+gate_boundaries.output(211, 0)
 
-# -------------------------------------------------------------------
-# Connectivity
-connect(metal1, m1_lbl)
-
-connect(psd, contact)
-connect(nsd, contact)
-connect(pgate, contact)
-connect(ngate, contact)
-connect(poly, contact)
-connect(contact, metal1)
-connect(metal1, via1)
-connect(via1, metal2)
-connect(metal2, via2)
-
-# Netlist extraction
-netlist
-netlist.simplify
-puts "Extracted Netlist Summary:"
-puts netlist.to_s
-
-netlist.combine_devices
-puts "Extracted after combine:"
-puts netlist.to_s
-
-
-netlist_ptr = netlist
-
-db = NetlistUtils.load_database()
-
-netlist_ptr.each_circuit do |circ|
-  #NetlistUtils.print_info(circ)
-  
-  runtime_descriptor = DescriptorExtractor.get_uutdescriptor(circ)
-  puts "Runtime_descriptor: #{runtime_descriptor}"
-  matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
-  puts "Descriptor classified as: #{matched_gate}"
-end
-            
+# Initialize output writer profiles
 writer = RBA::NetlistSpiceWriter::new
 writer.use_net_names = true 
+db = NetlistUtils.load_database()
 
-main_window = RBA::MainWindow.instance
-current_view = main_window&amp;.current_view
-layout_file_name =""
-if current_view
-  # Get the active layout object
-  active_layout = current_view.active_cellview&amp;.layout
+gate_counter = 1
+
+gate_boundaries.data.each do |bbox|
+  puts "--- Processing Automatically Detected Gate ##{gate_counter} ---"
+  local_region = make_layer
+  #local_region.insert(bbox)
+  local_region.insert(bbox.to_dtype(dbu))
+   #local_region = input(bbox)
   
-  if active_layout
-    layout_file_path = current_view.active_cellview.filename
-    layout_file_name = layout_file_path.empty? ? "untitled.gds" : File.basename(layout_file_path, ".gds.gz")
+  local_region.output(211+gate_counter, 0)
+
+  local_well    = well.interacting(local_region)
+  local_active  = active &amp; local_region
+  local_poly    = poly &amp; local_region
+  local_contact = contact &amp; local_region
+  local_metal1  = metal1.interacting(local_region) #&amp; local_region
+  local_via1    = via1 &amp; local_region
+  local_metal2  = metal2.interacting(local_region)
+  local_via2    = via2 &amp; local_region
+
+  # Derived device layers
+  local_gate  = local_poly &amp; local_active
+  local_sd    = local_active - local_gate
+  local_pgate = local_gate &amp; local_well
+  local_psd   = local_sd &amp; local_well
+  local_ngate = local_gate - local_well 
+  local_nsd   = local_sd - local_well
+
+  
+  local_metal1.output(213+gate_counter, 0)
+  
+  # Extract devices for this specific bounding region context
+  extract_devices(mos3("NMOS"), { 
+    "SD" =&gt; local_nsd, "G" =&gt; local_ngate, "tS" =&gt; local_nsd, "tD" =&gt; local_nsd, "tG" =&gt; local_poly
+  })
+  
+  extract_devices(mos3("PMOS"), {
+    "SD" =&gt; local_psd, "G" =&gt; local_pgate, "tS" =&gt; local_psd, "tD" =&gt; local_psd, "tG" =&gt; local_poly
+  })
+
+  # Process local connectivity
+  connect(local_metal1, m1_lbl)
+  connect(local_psd, local_contact)
+  connect(local_nsd, local_contact)
+  connect(local_pgate, local_contact)
+  connect(local_ngate, local_contact)
+  connect(local_poly, local_contact)
+  connect(local_contact, local_metal1)
+  connect(local_metal1, local_via1)
+  connect(local_via1, local_metal2)
+  connect(local_metal2, local_via2)
+
+  # Fetch and process the netlist snapshot generated in this iteration
+  extracted_snapshot = netlist
+  extracted_snapshot.simplify
+  extracted_snapshot.combine_devices
+
+  extracted_snapshot.each_circuit do |circ|
+    runtime_descriptor = DescriptorExtractor.get_uutdescriptor(circ)
+    puts "Gate #{gate_counter} Runtime_descriptor: #{runtime_descriptor}"
+    matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
+    puts "Gate #{gate_counter} Classified as: #{matched_gate}"
   end
-end
+  
+  
+  layout_file_name = "null"
+  main_window = RBA::MainWindow.instance
+  current_view = main_window&amp;.current_view
+  if current_view &amp;&amp; current_view.active_cellview
+    layout_file_path = current_view.active_cellview.filename
+    layout_file_name = layout_file_path.empty? ? "untitled" : File.basename(layout_file_path, ".gds.gz")
+  end
 
-layout_file_name = "null"
-output_file_path = "./output/"+ layout_file_name + "_netlist.sp"
-# To view the extracted netlist in the UI:
-netlist.write(output_file_path, writer)
-
-# Netlist vs. netlist check
-# compare</text>
+  output_file_path = "./output/#{layout_file_name}_gate_#{gate_counter}_netlist.sp"
+  extracted_snapshot.write(output_file_path, writer)
+  
+  gate_counter += 1
+  
+  # Reset the LVS accumulator tables for the next bounding box
+  clear_connections
+end</text>
 </klayout-macro>
