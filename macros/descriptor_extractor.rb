@@ -142,13 +142,6 @@ module DescriptorExtractor
             net_connection_descriptor += "#{round_descriptor}) "
         end
         duplicates = descriptor_tracker.select { |_descriptor, nets| nets.size > 1 }
-        if duplicates.empty?
-            puts 'All net descriptors are unique!'
-        else
-            duplicates.each do |descriptor, nets|
-                puts "MATCH FOUND: The descriptor '#{descriptor}' is shared by nets: #{nets.join(', ')}"
-            end
-        end
         net_connection_descriptor.chop!
         ["#{net_connection_descriptor})", !duplicates.empty?]
     end
@@ -302,7 +295,7 @@ module DescriptorExtractor
         test_nl = RBA::Netlist.new
 
         begin
-            test_nl.read(File.join(File.dirname(__FILE__), '../output/and2d4_netlist.sp'), RBA::NetlistSpiceReader.new)
+            test_nl.read(File.join(File.dirname(__FILE__), '../output/and2d0_netlist.sp'), RBA::NetlistSpiceReader.new)
 
             lib_path = File.join(File.dirname(__FILE__), 'netlist_utils.rb')
             load lib_path

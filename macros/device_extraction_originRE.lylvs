@@ -42,6 +42,10 @@ via1    = get_layer(tech_layers, 'via1')
 metal2  = get_layer(tech_layers, 'metal2')
 via2    = get_layer(tech_layers, 'via2')
 
+
+load File.dirname(__FILE__) + '/netlist_utils.rb'
+NetlistUtils.auto_label_vdd_gnd(layout.cell_obj, metal1, m1_lbl)
+
 # -------------------------------------------------------------------
 max_internal_distance = 0.059
 gate_cores            = poly | active
@@ -59,17 +63,23 @@ db = NetlistUtils.load_database()
 gate_counter = 1
 
 gate_boundaries.data.each do |bbox|
-  puts "--- Processing Automatically Detected Gate ##{gate_counter} ---"
   local_region = make_layer
   #local_region.insert(bbox)
   local_region.insert(bbox.to_dtype(dbu))
    #local_region = input(bbox)
   
-  local_region.output(211+gate_counter, 0)
 
-  local_well    = well.interacting(local_region)
   local_active  = active &amp; local_region
   local_poly    = poly &amp; local_region
+  local_gate  = local_poly &amp; local_active
+  
+  if local_gate.is_empty?
+    puts "Gate #{gate_counter}: No devices found inside this bounding box. Skipping..."
+    gate_counter += 1
+    next # Skips to the next iteration of the gate_boundaries loop
+  end
+  
+  local_well    = well.interacting(local_region)
   local_contact = contact &amp; local_region
   local_metal1  = metal1.interacting(local_region) #&amp; local_region
   local_via1    = via1 &amp; local_region
@@ -77,15 +87,12 @@ gate_boundaries.data.each do |bbox|
   local_via2    = via2 &amp; local_region
 
   # Derived device layers
-  local_gate  = local_poly &amp; local_active
+  
   local_sd    = local_active - local_gate
   local_pgate = local_gate &amp; local_well
   local_psd   = local_sd &amp; local_well
   local_ngate = local_gate - local_well 
   local_nsd   = local_sd - local_well
-
-  
-  local_metal1.output(213+gate_counter, 0)
   
   # Extract devices for this specific bounding region context
   extract_devices(mos3("NMOS"), { 
@@ -117,7 +124,12 @@ gate_boundaries.data.each do |bbox|
     runtime_descriptor = DescriptorExtractor.get_uutdescriptor(circ)
     puts "Gate #{gate_counter} Runtime_descriptor: #{runtime_descriptor}"
     matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
-    puts "Gate #{gate_counter} Classified as: #{matched_gate}"
+    if matched_gate == 'Unknown/Unmapped Topology'
+      puts "Gate #{gate_counter} Unknown, marking layer 212"
+      local_region.output(212, 0)
+    else
+      puts "Gate #{gate_counter} Classified as: #{matched_gate}"
+    end
   end
   
   
