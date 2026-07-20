@@ -4,6 +4,44 @@
 module NetlistUtils
     CACHE_FILE = 'database.cache'
     DB_TEXT_FILE = 'cellDescriptorsTable_ordenado.txt'
+    
+    def self.auto_label_vdd_gnd(cell, m1_lyr, lbl_lyr, min_width_micron = 0.39, first_rail_is_vdd = true)
+      min_rail_width_dbu = (min_width_micron / cell.layout.dbu).to_i
+      rails = []
+      m1_lyr.data.each do |polygon|
+        bbox = polygon.bbox
+        if bbox.height >= min_rail_width_dbu && bbox.width >= bbox.height
+          rails << bbox
+        end
+      end
+  
+      # Sort the rails vertically from bottom to top
+      rails.sort_by! { |box| box.center.y }
+      
+      puts "INFO [NetlistUtils]: Found #{rails.length} qualifying power rails."
+  scratch_layer_idx = cell.layout.insert_layer(RBA::LayerInfo.new)
+    scratch_shapes = cell.shapes(scratch_layer_idx)
+
+    # Inject alternating labels into our temporary database container
+    rails.each_with_index do |box, index|
+      is_even_row = (index % 2 == 0)
+      signal_name = is_even_row ? (first_rail_is_vdd ? "VDD" : "GND") : (first_rail_is_vdd ? "GND" : "VDD")
+      
+      text_obj = RBA::Text.new(signal_name, box.center.x, box.center.y)
+      puts text_obj.to_s
+      # Text objects fit perfectly inside an RBA::Shapes database collection
+      scratch_shapes.insert(text_obj)
+    end
+    
+    # FIX: Move the text labels into your live LVS label layer object using its native installer
+    puts m1_lyr.data.insert(scratch_shapes)
+    cell.layout.update
+    # Clear out the scratch layer from the layout database to keep it clean
+    # cell.layout.delete_layer(scratch_layer_idx)
+    
+    puts "INFO [NetlistUtils]: Successfully injected #{rails.length} labels into the label layer wrapper."
+    return rails.length
+    end
 
     def self.extract_signature(text_line)
         # 1. (6 integers) -> net_descriptor
