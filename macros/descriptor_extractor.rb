@@ -142,7 +142,7 @@ module DescriptorExtractor
             net_connection_descriptor += "#{round_descriptor}) "
         end
         duplicates = descriptor_tracker.select { |_descriptor, nets| nets.size > 1 }
-        net_connection_descriptor.chop!
+        net_connection_descriptor = net_connection_descriptor.chop
         ["#{net_connection_descriptor})", !duplicates.empty?]
     end
 
