@@ -35,17 +35,18 @@ SEMD-TFM/
       
 1. **Setup Technology Files:**
    Create a technology for KLayout: `Tools` -> `Manage Technologies` -> `+`. Change `base path` to `$pwd/tech/OriginRe/` and `layers propierties` to `OriginRE.lyp`
+   * A json file `/tech/#{tech_name}_layout_map.json` will be expected mapping the required layers.
 
-2. **Execute Identification Macros:**
+3. **Execute Identification Macros:**
    * Open the **Macro Development** editor (`F5`).
    * Run the recognition script `macros/device_extraction_originRE.lylvs` to trigger topological analysis and multi-pass execution (also `F5`).
 
-3. **Output & Netlists:**
+4. **Output & Netlists:**
    * The SPICE file for each gate detected has been saved in the `output/` directory.
    * Unnown gates marked in the layout in layer configured by output_unknown_gate (`237`)
    * Known gates marked in the layout in layer configured by output_known_gate (`238`)
      
-4. **Script configurations:**
+5. **Script configurations:**
    The following variables can be found at the start of the main script `device_extraction_originRE.lylvs`:
    ```Ruby #
    * output_unknown_gate      # Used to mark the unknown gates
