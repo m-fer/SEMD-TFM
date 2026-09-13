@@ -1,4 +1,5 @@
 cellDescriptorsTable_ordenado.txt
+cellDescriptorsTable_complete.txt
 database.cache
 tsmc-65-simple.lyp
 pulpino_slv2_pads.gds.gz
@@ -6,3 +7,4 @@ launcher.sh
 session.lys
 *.swp
 output/
+images/
