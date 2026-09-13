@@ -17,6 +17,15 @@
  <dsl-interpreter-name>lvs-dsl-xml</dsl-interpreter-name>
  <text>require 'json'
 
+input_mask_layer = 0
+output_unknown_gate = 237
+output_known_gate = 238
+max_internal_distance = 0.0725
+extract_labels = true
+rail_height = 0.42
+rail_spacing = 2000
+first_vdd = false
+
 tech_name = "tsmc-65-simple"
 config_filename = "#{tech_name}_layout_map.json"
 config_path = File.expand_path(File.join(File.dirname(__FILE__), "../tech", config_filename))
@@ -34,57 +43,65 @@ end
 # Raw Input Layers
 well    = get_layer(tech_layers, 'well')
 active  = get_layer(tech_layers, 'active')
-poly    = get_layer(tech_layers, 'poly')
-contact = get_layer(tech_layers, 'contact')
-metal1  = get_layer(tech_layers, 'metal1')
-m1_lbl  = get_layer(tech_layers, 'm1_lbl')
-via1    = get_layer(tech_layers, 'via1')
-metal2  = get_layer(tech_layers, 'metal2')
-via2    = get_layer(tech_layers, 'via2')
+poly    = get_layer(tech_layers, 'poly')    
+contact = get_layer(tech_layers, 'contact') 
+metal1  = get_layer(tech_layers, 'metal1')  
+m1_lbl  = get_layer(tech_layers, 'm1_lbl')  
+via1    = get_layer(tech_layers, 'via1')    
+metal2  = get_layer(tech_layers, 'metal2')  
+via2    = get_layer(tech_layers, 'via2')    
 
+if (input_mask_layer != 0)
+  unknown_regions       = input(input_mask_layer, 0)
+  unknown_regions.output(216, 0)
+  active = active.interacting(unknown_regions)
+end
 
 load File.dirname(__FILE__) + '/netlist_utils.rb'
 load File.dirname(__FILE__) + '/descriptor_extractor.rb'
-NetlistUtils.auto_label_vdd_gnd(layout.cell_obj, metal1, tech_layers['m1_lbl']['layer'],tech_layers['m1_lbl']['datatype'])
+
+if(extract_labels)
+  NetlistUtils.auto_label_vdd_gnd(layout.cell_obj, metal1, tech_layers['m1_lbl']['layer'],tech_layers['m1_lbl']['datatype'],
+                                  rail_height, rail_spacing, first_vdd)
+end
 
 # -------------------------------------------------------------------
-max_internal_distance = 0.059
-real_gates = poly &amp; active
-raw_clusters = (poly | active).sized(max_internal_distance)
-clusters     = raw_clusters.interacting(real_gates)
-gate_boundaries = clusters.sized(-max_internal_distance).extents
-
-puts "INFO: Found #{gate_boundaries.data.size} gate boundaries to process."
-
-clusters.output(210, 0)
-gate_boundaries.output(211, 0)
-
 # Initialize output writer profiles
 writer = RBA::NetlistSpiceWriter::new
 writer.use_net_names = true 
 db = NetlistUtils.load_database()
 
 gate_counter = 1
-unknown_output_marker_text = layout.cell_obj.shapes(layout.cell_obj.layout.layer(212,0))
-gate_output_marker_text = layout.cell_obj.shapes(layout.cell_obj.layout.layer(213,0))
+
+unknown_output_marker_text = layout.cell_obj.shapes(layout.cell_obj.layout.layer(output_unknown_gate,0))
+unknown_output_marker_text.clear
+gate_output_marker_text = layout.cell_obj.shapes(layout.cell_obj.layout.layer(output_known_gate,0))
+gate_output_marker_text.clear
 identified_gates = 0
 
-#vdd_metal = metal1.interacting(m1_lbl.texts("VDD"))
-#source = active.interacting(vdd_metal)
-#drain = active - source
+
+vdd_metal = metal1.interacting(m1_lbl.texts("VDD"))
+gnd_metal = metal1.interacting(m1_lbl.texts("GND"))
+p_active = active.interacting(vdd_metal)
+n_active = active - p_active
+
+gate_boundaries = ((poly|active).interacting(poly &amp; active)-(gnd_metal|vdd_metal)).sized(max_internal_distance).extents
+
+puts "INFO: Found #{gate_boundaries.data.size} gate boundaries to process."
+
+tiles(100.um, 100.um)
+threads(4)
 
 gate_boundaries.data.each do |bbox|
 
   t_start = (Time.now.to_f * 1000).to_i
   local_region = make_layer
-  #local_region.insert(bbox)
   local_region.insert(bbox.to_dtype(dbu))
-   #local_region = input(bbox)
-  
-  
-  local_active  = active &amp; local_region
-  local_poly    = poly &amp; local_region
-  local_gate  = local_poly &amp; local_active
+  extended_local = local_region.sized(rail_height-max_internal_distance)
+  local_p_active = p_active &amp; local_region
+  local_n_active = n_active &amp; local_region
+  local_poly    = poly &amp; extended_local # needed because of poly going to vdd rails (TSMC_DFQ_D!)
+  local_gate  = local_poly &amp; (p_active | n_active)
   
   if local_gate.is_empty?
     puts "Gate #{gate_counter}: No devices found inside this bounding box. Skipping..."
@@ -92,19 +109,18 @@ gate_boundaries.data.each do |bbox|
     next
   end
 
-   local_well    = well &amp; local_region
-   local_contact = contact &amp; local_region
-   local_metal1  = metal1.interacting(local_region) #&amp;amp; local_region
-   local_via1    = via1 &amp; local_region
-   #local_metal2  = metal2.interacting(local_region)
-   #local_via2    = via2 &amp; local_region
+   local_metal1  = metal1 &amp; extended_local # use metal1.interacting(local_region) for better results, it is slower
+   local_contact = contact &amp; extended_local
+   local_via1    = via1 &amp; extended_local
+   local_m1_lbl  = m1_lbl &amp; extended_local
+   local_metal2  = metal2.interacting(local_region)
+   local_via2    = via2 &amp; local_region
    
-   local_sd    = local_active - local_gate
-   local_pgate = local_gate &amp; local_well
-   local_psd   = local_sd &amp; local_well
-   local_ngate = local_gate - local_well 
-   local_nsd   = local_sd - local_well
-
+   local_pgate = local_gate &amp; local_p_active
+   local_psd   = local_p_active - local_gate
+   local_ngate = local_gate &amp; local_n_active 
+   local_nsd   = local_n_active - local_gate
+   
   t_extract_devices = (Time.now.to_f * 1000).to_i  
 
   # Extract devices for this specific bounding region context
@@ -118,45 +134,42 @@ gate_boundaries.data.each do |bbox|
   
   t_connectivity = (Time.now.to_f * 1000).to_i
 
-
   # Process local connectivity
-  connect(local_metal1, m1_lbl)
   connect(local_psd, local_contact)
   connect(local_nsd, local_contact)
   connect(local_pgate, local_contact)
   connect(local_ngate, local_contact)
   connect(local_poly, local_contact)
   connect(local_contact, local_metal1)
+  connect(local_metal1, m1_lbl)
   connect(local_metal1, local_via1)
-  #connect(local_via1, local_metal2)
-  #connect(local_metal2, local_via2)
+  connect(local_via1, local_metal2)
+  connect(local_metal2, local_via2)
 
   t_netlist = (Time.now.to_f * 1000).to_i
 
-  # Fetch and process the netlist snapshot generated in this iteration
-  extracted_snapshot = netlist
-  extracted_snapshot.simplify
-  extracted_snapshot.combine_devices
+  # Extract netlist without parallel transistors   
+  local_netlist = netlist.simplify.combine_devices
   
   t_end = (Time.now.to_f * 1000).to_i
 
   timestamp = Time.now.strftime("%H:%M:%S.%L")
   puts "[#{timestamp}] Devices extracted: local processing [#{t_extract_devices-t_start}ms], extracting devices [#{t_connectivity-t_extract_devices}ms], connect [#{t_netlist-t_connectivity}ms], netlist: [#{t_end-t_netlist}ms]"
 
-  extracted_snapshot.each_circuit do |circ|
-    runtime_descriptor = DescriptorExtractor.get_uutdescriptor(circ)
+  local_netlist.each_circuit do |circ|
+    runtime_descriptor = DescriptorExtractor.get_utdescriptor(circ)
     timestamp = Time.now.strftime("%H:%M:%S.%L")
     puts "[#{timestamp}] Gate [#{gate_counter}/#{gate_boundaries.data.size}] Runtime_descriptor: #{runtime_descriptor}"
     matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
     timestamp = Time.now.strftime("%H:%M:%S.%L")
     if matched_gate == 'Unknown/Unmapped Topology'
-      puts "[#{timestamp}] Unknown gate: [#{gate_counter-identified_gates}-#{identified_gates}] marking layer 212"
-      local_region.output(212, 0)
+      puts "[#{timestamp}] Unknown gate: [#{gate_counter-identified_gates}-#{identified_gates}] marking layer #{unknown_output_marker_text}"
+      local_region.output(output_unknown_gate, 0)
       unknown_output_marker_text.insert(RBA::Text.new("Gate #{gate_counter}", bbox.bbox.center.x, bbox.bbox.center.y))
     else
       identified_gates += 1
-      puts "[#{timestamp}] Classified gate [#{identified_gates}] as: #{matched_gate}, marking layer 213"
-      local_region.output(213, 0)
+      puts "[#{timestamp}] Classified gate [#{identified_gates}] as: #{matched_gate}, marking layer #{gate_output_marker_text}"
+      local_region.output(output_known_gate, 0)
       gate_output_marker_text.insert(RBA::Text.new("#{matched_gate}:#{gate_counter}", bbox.bbox.center.x, bbox.bbox.center.y))
     end
   end
@@ -171,12 +184,14 @@ gate_boundaries.data.each do |bbox|
   end
 
   output_file_path = "./output/#{layout_file_name}_gate_#{gate_counter}_netlist.sp"
-  extracted_snapshot.write(output_file_path, writer)
+  local_netlist.write(output_file_path, writer)
   
   gate_counter += 1
 
-  
   # Reset the LVS accumulator tables for the next bounding box
   clear_connections
-end</text>
+end
+
+NetlistUtils.save_gates_descriptor()
+  </text>
 </klayout-macro>
