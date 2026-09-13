@@ -1,79 +1,61 @@
 # frozen_string_literal: true
 
 # File: netlist_utils.rb
+require 'fileutils'
+
 module NetlistUtils
-    CACHE_FILE = 'database.cache'
-    DB_TEXT_FILE = 'cellDescriptorsTable_ordenado.txt'
-    def self.auto_label_vdd_gnd(cell, m1_lyr, lbl_lyr, lbl_datatype, min_row_width_micron = 200.0, first_rail_is_vdd = true)
-  layout_obj = cell.layout
-  dbu = layout_obj.dbu
-
-  # 1. Clear previous labels
-  lbl_layer_idx = layout_obj.layer(lbl_lyr, lbl_datatype)
-  db_shapes = cell.shapes(lbl_layer_idx)
-  db_shapes.clear
-
-  # 2. Collect M1 bounding boxes
-  min_h_dbu = (0.39 / dbu).to_i
-  # max_h_dbu = (0.50 / dbu).to_i 
-
-  boxes = []
-  m1_lyr.data.each do |poly|
-    bbox = poly.bbox
-    if bbox.height >= min_h_dbu && bbox.width >= bbox.height
-      boxes << bbox
+    CACHE_FILE ||= 'database.cache'
+    DB_TEXT_FILE = 'cellDescriptorsTable_updated.txt'
+    @unknown_gates = Set.new
+    @matched_gates = Hash.new(0)
+    
+    def self.save_gates_descriptor(file_path = 'processed_gates.txt')
+      existing_lines = !File.exist?(file_path) ? Set.new :
+                        File.readlines(file_path, chomp: true).map(&:strip).to_set
+      
+      lines_to_write = "********************************************************** \n\n"
+      lines_to_write += "Found #{@matched_gates.size} diferent gates and #{@unknown_gates.size} unknown:\n\n"
+      
+      @matched_gates.each do |descriptor, count|
+        lines_to_write += "#{descriptor} -> seen #{count} times \n"
+      end
+      lines_to_write += "Unknwown gates: \n"
+      lines_to_write += @unknown_gates.to_a.join("\n")
+      lines_to_write += "********************************************************** \n"
+      
+      FileUtils.mkdir_p(File.dirname(file_path))
+      File.open(file_path, 'a') do |file|
+        file.puts lines_to_write
+      end
     end
-  end
-
-  return 0 if boxes.empty?
-
-  # 3. Sort and group boxes into Y-rows
-  boxes.sort_by! { |b| b.center.y }
-
-  y_threshold = (0.04 / dbu).to_i
-  rows = []
-  current_row = []
-
-  boxes.each do |box|
-    if current_row.empty? || (box.center.y - current_row.first.center.y).abs <= y_threshold
-      current_row << box
-    else
-      rows << current_row
-      current_row = [box]
+    
+    def self.auto_label_vdd_gnd(cell, m1_lyr, lbl_lyr, lbl_datatype, rail_height = 0.24, rail_spacing = 2000, first_rail_is_vdd = true)
+      layout_obj = cell.layout
+      dbu = layout_obj.dbu
+      
+      # 1. Clear previous labels
+      lbl_layer_idx = layout_obj.layer(lbl_lyr, lbl_datatype)
+      db_shapes = cell.shapes(lbl_layer_idx)
+      db_shapes.clear
+      
+      tolerance = (rail_height / dbu).to_i
+      total_labels = 0
+      m1_lyr.data.each do |poly|
+        bbox = poly.bbox
+        rail_distance = (bbox.center.y + tolerance) % rail_spacing
+        if rail_distance <= tolerance*2
+          rail_row = (bbox.center.y + tolerance) / rail_spacing
+          signal_name = (rail_row.even? == first_rail_is_vdd) ? "VDD" : "GND"
+          text_obj = RBA::Text.new(signal_name, bbox.center.x, rail_row*rail_spacing)
+          db_shapes.insert(text_obj)
+          total_labels += 1
+        end
+      end
+      
+      layout_obj.update
+      puts "INFO [NetlistUtils]: Successfully injected #{total_labels} labels."
+      return total_labels
     end
-  end
-  rows << current_row unless current_row.empty?
-
-  min_width_dbu = (min_row_width_micron / dbu).to_i
-
-  rail_rows = rows.select do |row_boxes|
-    total_width = row_boxes.sum(&:width)
-    total_width >= min_width_dbu
-  end
-
-  # Sort valid rail rows from bottom to top
-  rail_rows.sort_by! { |row| row.first.center.y }
-
-  puts "INFO [NetlistUtils]: Identified #{rail_rows.length} power rail rows (Span >= #{min_row_width_micron}um)."
-
-  total_labels = 0
-
-  # 5. Alternate VDD / GND per row, and label every shape/segment on that row
-  signal_name = first_rail_is_vdd ? "VDD" : "GND"
-  
-  rail_rows.each_with_index do |row_boxes, row_index|
-    row_boxes.each do |seg_box|
-      text_obj = RBA::Text.new(signal_name, seg_box.center.x, seg_box.center.y)
-      db_shapes.insert(text_obj)
-      total_labels += 1
-    end
-    signal_name = signal_name == "VDD" ? "GND" : "VDD" 
-  end
-
-  layout_obj.update
-  puts "INFO [NetlistUtils]: Successfully injected #{total_labels} labels across #{rail_rows.length} rail rows."
-  return total_labels
-end
 
     def self.extract_signature(text_line)
         # 1. (6 integers) -> net_descriptor
@@ -89,12 +71,12 @@ end
         topology_name = nil
 
         raw_sections.each do |name, block_text|
-            # Harvest Pin Vectors (Exactly 3 integers)
+            # Search (Groups of 3 integers)
             connex_vectors = block_text.scan(/\(\s*(\d+(?:\s+\d+){2})\s*\)/).map do |match|
                 match[0].split.map(&:to_i)
             end
 
-            # Harvest Terminal Vectors (Exactly 5 integers)
+            # Search (Groups of 5 integers)
             term_vectors = block_text.scan(/\(\s*(\d+(?:\s+\d+){4})\s*\)/).map do |match|
                 match[0].split.map(&:to_i)
             end
@@ -104,35 +86,26 @@ end
             elsif term_vectors.any?
                 term_signatures << term_vectors.sort
             else
-                # If it has no tracking vectors, it's the root macro name (e.g., "LF_NOR3I_X1")
                 topology_name = name
             end
         end
 
-        # Sort the outer lists to guarantee total order-independence
         connex_signatures.sort!
         term_signatures = term_signatures.empty? ? nil : term_signatures.sort
 
         [topology_name, net_signature, connex_signatures, term_signatures]
     end
 
-    def self.load_database(force_load = false)
-        # 1. Check if a pre-compiled binary cache already exists and is up to date
+    def self.load_database(force_load = true)
         if !force_load && File.exist?(CACHE_FILE) && File.mtime(CACHE_FILE) >= File.mtime(DB_TEXT_FILE)
             return File.open(CACHE_FILE, 'rb') { |f| Marshal.load(f) }
         end
-
-        # 2. Cache is missing or outdated -> Parse the text file (Slow step, runs ONCE)
         puts 'Cache missing or outdated. Parsing raw database text file...'
         database = parse_text_database(DB_TEXT_FILE)
-
-        # 3. Save the live Ruby Hash to disk as a binary dump for next time
         File.open(CACHE_FILE, 'wb') { |f| Marshal.dump(database, f) }
-
         database
     end
 
-    # Your original text-parsing loop moved to a helper
     def self.parse_text_database(file_path)
         database = {}
         current_category = nil
@@ -163,7 +136,7 @@ end
     end
 
     def self.identify_descriptor(runtime_str, database)
-        # Extract the category context (e.g., "4 4")
+        # Extract the index ("4 4")
         unless runtime_str =~ /"(\d+\s+\d+)"\s*:/
             puts 'Error: Invalid descriptor format (missing grid category identifier).'
             return nil
@@ -172,14 +145,19 @@ end
 
         # Generate the signature for the unknown runtime object
         _, net_signature, connex_signatures, term_signatures = extract_signature(runtime_str)
-        runtime_key = [net_signature, connex_signatures, term_signatures]
+        runtime_key = [net_signature, connex_signatures, term_sign                # 2. Get Terminals and Net Connections
+atures]
 
-        # Instant lookup inside our Hash of Hashes
-        return database[category][runtime_key] if database[category]&.key?(runtime_key)
-
-        'Unknown/Unmapped Topology'
+        if database[category]&.key?(runtime_key)
+          @matched_gates[database[category][runtime_key]] += 1
+          return database[category][runtime_key]
+        end
+                
+        @unknown_gates.add(runtime_str)
+        return 'Unknown/Unmapped Topology'
     end
-
+  
+    # Used to test klayout lvs objects
     def self.print_info(nl)
         return puts 'Netlist is null!' if nl.nil?
 
@@ -219,14 +197,6 @@ end
             circuit.each_device do |device|
                 device_class = device.device_class
                 puts "--- Device found: #{device.name} ---"
-
-                # Get Device Parameters (e.g., W, L, Area)
-                # device_class.parameter_definitions.each do |param_def|
-                #  val = device.parameter(param_def.id)
-                #  puts "  Param: #{param_def.name} = #{val}"
-                # end
-
-                # 2. Get Terminals and Net Connections
                 device_class.terminal_definitions.each do |term_def|
                     net = device.net_for_terminal(term_def.id)
                     net_name = net ? net.name : 'unconnected'
@@ -235,20 +205,5 @@ end
             end
         end
     end
-
-    if __FILE__ == $PROGRAM_NAME
-
-        db = NetlistUtils.load_database(true)
-
-        # test for nand2
-        runtime_descriptor = '"4 4": (UnknownName (1 0 2 2 0 0)(2 1 1 0 2 1)(1 2 1 3 0 1))(("$3" ((2 1 11)(1 1 11)) ("$1" ((1 2 21)) ("$4" ((2 1 12)(1 1 10)))'
-        matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
-        puts "Descriptor classified as: #{matched_gate}"
-
-        # test for and2
-        runtime_descriptor = '"6 5": (UnknownName (1 1 1 2 0 1)(1 3 2 3 2 0)(1 0 2 2 0 0)(2 1 1 0 2 1))(("$5" ((2 2 21)(1 0 0)) ("$1" ((2 2 23)(1 0 0)) ("$2" ((2 2 22)(1 0 0)))'
-        matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
-        puts "Descriptor classified as: #{matched_gate}"
-
-    end
+    
 end
