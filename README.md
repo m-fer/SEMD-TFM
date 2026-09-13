@@ -43,6 +43,7 @@ SEMD-TFM/
 
 4. **Output & Netlists:**
    * The SPICE file for each gate detected has been saved in the `output/` directory.
+   * The descriptor and number of known gates will be saved in `processed_gates.txt`
    * Unnown gates marked in the layout in layer configured by output_unknown_gate (`237`)
    * Known gates marked in the layout in layer configured by output_known_gate (`238`)
      
