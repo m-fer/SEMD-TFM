@@ -163,12 +163,12 @@ gate_boundaries.data.each do |bbox|
     matched_gate = NetlistUtils.identify_descriptor(runtime_descriptor, db)
     timestamp = Time.now.strftime("%H:%M:%S.%L")
     if matched_gate == 'Unknown/Unmapped Topology'
-      puts "[#{timestamp}] Unknown gate: [#{gate_counter-identified_gates}-#{identified_gates}] marking layer #{unknown_output_marker_text}"
+      puts "[#{timestamp}] Unknown gate: [#{gate_counter-identified_gates}-#{identified_gates}] marking layer #{output_unknown_gate}"
       local_region.output(output_unknown_gate, 0)
       unknown_output_marker_text.insert(RBA::Text.new("Gate #{gate_counter}", bbox.bbox.center.x, bbox.bbox.center.y))
     else
       identified_gates += 1
-      puts "[#{timestamp}] Classified gate [#{identified_gates}] as: #{matched_gate}, marking layer #{gate_output_marker_text}"
+      puts "[#{timestamp}] Classified gate [#{identified_gates}] as: #{matched_gate}, marking layer #{output_known_gate}"
       local_region.output(output_known_gate, 0)
       gate_output_marker_text.insert(RBA::Text.new("#{matched_gate}:#{gate_counter}", bbox.bbox.center.x, bbox.bbox.center.y))
     end

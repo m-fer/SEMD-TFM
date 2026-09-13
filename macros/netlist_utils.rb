@@ -145,8 +145,7 @@ module NetlistUtils
 
         # Generate the signature for the unknown runtime object
         _, net_signature, connex_signatures, term_signatures = extract_signature(runtime_str)
-        runtime_key = [net_signature, connex_signatures, term_sign                # 2. Get Terminals and Net Connections
-atures]
+        runtime_key = [net_signature, connex_signatures, term_signatures]
 
         if database[category]&.key?(runtime_key)
           @matched_gates[database[category][runtime_key]] += 1
