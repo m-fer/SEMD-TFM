@@ -23,8 +23,8 @@ SEMD-TFM/
 
 ## Prerequisites & Requirements
 
-KLayout: Version 0.28+ (with Ruby script execution enabled)
-OS: Linux, macOS, or Windows
+* KLayout: Version 0.28+ (with Ruby script execution enabled)
+* OS: Linux, macOS, or Windows
 
 ## Usage Guide
 
